@@ -11,5 +11,5 @@ const CONFIG = {
     GET_EXPENSES_URL: "https://n8n.ajaychanumolu.me/webhook/getexpences",
 
     // n8n Webhook: AI Chat assistant
-    CHAT_WEBHOOK_URL: "https://n8n.ajaychanumolu.me/webhook/chat",
+    CHAT_WEBHOOK_URL: "https://n8n.ajaychanumolu.me/webhook/d927bd76-dbf6-4793-97e1-6ce1c3251034/chat",
 };
