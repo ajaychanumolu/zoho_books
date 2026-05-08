@@ -22,6 +22,17 @@ function createRow() {
                     <input type="date" class="date-input" required>
                 </div>
                 <div class="form-group">
+                    <label>Company</label>
+                    <select class="company-input" required>
+                        <option value="">— Select —</option>
+                        <option value="ECBC">ECBC</option>
+                        <option value="2024">2024</option>
+                        <option value="MINING">MINING</option>
+                        <option value="LAYOUT">LAYOUT</option>
+                        <option value="ATC">ATC</option>
+                    </select>
+                </div>
+                <div class="form-group">
                     <label>Category</label>
                     <select class="cat-input" required><option value="">— Select —</option></select>
                 </div>
@@ -69,12 +80,19 @@ function setupRowLogic(row) {
 
     dateInput.valueAsDate = new Date();
 
-    // Populate categories from categories.js
-    for (const cat in categoriesData) {
-        const opt = document.createElement('option');
-        opt.value = cat;
-        opt.textContent = cat;
-        catInput.appendChild(opt);
+    // Populate categories based on CORE BRIGHT grouping from categories.js
+    for (const [groupLabel, categories] of Object.entries(coreBrightGroups)) {
+        const optgroup = document.createElement('optgroup');
+        optgroup.label = groupLabel;
+        categories.forEach(cat => {
+            if (categoriesData[cat]) {
+                const opt = document.createElement('option');
+                opt.value = cat;
+                opt.textContent = cat;
+                optgroup.appendChild(opt);
+            }
+        });
+        catInput.appendChild(optgroup);
     }
 
     catInput.addEventListener('change', function () {
@@ -170,6 +188,7 @@ document.getElementById('bulkExpenseForm').addEventListener('submit', async func
         }
         payloadData.push({
             date: row.querySelector('.date-input').value,
+            company: row.querySelector('.company-input').value,
             category: row.querySelector('.cat-input').value,
             subcategory: finalSubcat,
             amount: parseFloat(row.querySelector('.amount-input').value),

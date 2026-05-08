@@ -64,6 +64,17 @@
         </div>
         <div class="dash-filter-custom">
             <div class="filter-group">
+                <label class="filter-label">Company</label>
+                <select id="dashCompany" class="filter-date" onchange="applyDashFilters()" style="padding: 4px 8px; border: 1px solid #E8E4D4; border-radius: 4px; font-family: inherit; font-size: 0.85rem; color: #56453F; background: #FDFCF7;">
+                    <option value="">All</option>
+                    <option value="ECBC">ECBC</option>
+                    <option value="2024">2024</option>
+                    <option value="MINING">MINING</option>
+                    <option value="LAYOUT">LAYOUT</option>
+                    <option value="ATC">ATC</option>
+                </select>
+            </div>
+            <div class="filter-group">
                 <label class="filter-label">From</label>
                 <input type="date" id="dashFrom" class="filter-date" onchange="applyDashFilters()">
             </div>
@@ -206,6 +217,17 @@
                 </div>
                 <div class="chart-body">
                     <div class="recent-list" id="recentList"></div>
+                </div>
+            </div>
+
+            <!-- Company Spend Breakdown -->
+            <div class="chart-card chart-card-company" id="chartCompanyCard" style="grid-column: 1 / -1;">
+                <div class="chart-card-header">
+                    <h2 class="chart-title">Company Breakdown</h2>
+                    <span class="chart-subtitle">Expenses per company</span>
+                </div>
+                <div class="chart-body">
+                    <canvas id="chartCompany"></canvas>
                 </div>
             </div>
         </div>

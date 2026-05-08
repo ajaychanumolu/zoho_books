@@ -4,6 +4,7 @@
 
 let dashAllExpenses = [];
 let dashFiltered = [];
+let dashFilteredDatesOnly = [];
 
 // ---- Color palette for charts ----
 const CHART_COLORS = [
@@ -134,10 +135,27 @@ function setPreset(btn, range) {
 function applyDashFilters() {
     const from = document.getElementById('dashFrom').value;
     const to = document.getElementById('dashTo').value;
+    const company = document.getElementById('dashCompany') ? document.getElementById('dashCompany').value : '';
 
     let result = [...dashAllExpenses];
     if (from) result = result.filter(e => e.date >= from);
     if (to) result = result.filter(e => e.date <= to);
+
+    // Save date-filtered array for the company chart
+    dashFilteredDatesOnly = [...result];
+    if (company) {
+        result = result.filter(e => {
+            // Check if the account name has the company suffix
+            const expCompany = getExpenseCompany(e.account_name);
+            if (expCompany === company) return true;
+            
+            // Fallbacks in case n8n put it elsewhere
+            const matchesDirect = e.company === company || e.customer_name === company || e.reference_number === company;
+            const matchesCustom = Array.isArray(e.custom_fields) && e.custom_fields.some(cf => cf.value === company);
+            const matchesNote = e.notes && e.notes.includes(company);
+            return matchesDirect || matchesCustom || matchesNote;
+        });
+    }
 
     dashFiltered = result;
 
@@ -163,6 +181,7 @@ function renderDashboard() {
     renderDailyChart();
     renderPaymentChart();
     renderRecentList();
+    renderCompanyChart();
 }
 
 // ============================================================
@@ -174,7 +193,7 @@ function renderKPIs() {
     const count = expenses.length;
     const avg = count > 0 ? total / count : 0;
     const highest = expenses.reduce((max, e) => Math.max(max, parseFloat(e.total) || 0), 0);
-    const categories = new Set(expenses.map(e => e.account_name).filter(Boolean));
+    const categories = new Set(expenses.map(e => getBaseCategory(e.account_name)).filter(Boolean));
 
     animateValue('kpiTotalSpent', total, true);
     document.getElementById('kpiCount').textContent = count.toLocaleString('en-IN');
@@ -225,7 +244,7 @@ function renderPieChart() {
     // Aggregate by category
     const catMap = {};
     dashFiltered.forEach(e => {
-        const cat = e.account_name || 'Uncategorized';
+        const cat = getBaseCategory(e.account_name);
         catMap[cat] = (catMap[cat] || 0) + (parseFloat(e.total) || 0);
     });
 
@@ -457,7 +476,7 @@ function renderTop5() {
     const container = document.getElementById('top5List');
     const catMap = {};
     dashFiltered.forEach(e => {
-        const cat = e.account_name || 'Uncategorized';
+        const cat = getBaseCategory(e.account_name);
         catMap[cat] = (catMap[cat] || 0) + (parseFloat(e.total) || 0);
     });
 
@@ -763,7 +782,7 @@ function renderRecentList() {
         <div class="recent-item">
             <div class="recent-dot" style="background:${dotColors[i % dotColors.length]}"></div>
             <div class="recent-info">
-                <div class="recent-cat">${escapeHtml(e.account_name || 'Uncategorized')}</div>
+                <div class="recent-cat">${escapeHtml(getBaseCategory(e.account_name))}</div>
                 <div class="recent-date">${formatDateFull(e.date)}</div>
             </div>
             <div class="recent-amount">₹${(parseFloat(e.total) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
@@ -772,8 +791,150 @@ function renderRecentList() {
 }
 
 // ============================================================
+// COMPANY BREAKDOWN BAR CHART
+// ============================================================
+function renderCompanyChart() {
+    const canvas = document.getElementById('chartCompany');
+    if (!canvas) return;
+    const container = canvas.parentElement;
+    const width = container.clientWidth - 40;
+    const height = 220;
+    const dpr = window.devicePixelRatio || 1;
+
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    canvas.style.width = width + 'px';
+    canvas.style.height = height + 'px';
+
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    // Aggregate by company using dashFilteredDatesOnly
+    const compMap = {};
+    dashFilteredDatesOnly.forEach(e => {
+        const comp = getExpenseCompany(e.account_name) || 'Unknown';
+        compMap[comp] = (compMap[comp] || 0) + (parseFloat(e.total) || 0);
+    });
+
+    const keys = Object.keys(compMap).sort((a,b) => compMap[b] - compMap[a]);
+    const values = keys.map(k => compMap[k]);
+
+    if (keys.length === 0) {
+        ctx.clearRect(0, 0, width, height);
+        ctx.fillStyle = '#BAAB92';
+        ctx.font = '500 14px "DM Sans", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('No data available', width / 2, height / 2);
+        return;
+    }
+
+    const maxVal = Math.max(...values) * 1.15;
+    const marginLeft = 65;
+    const marginBottom = 36;
+    const marginTop = 10;
+    const chartW = width - marginLeft - 20;
+    const chartH = height - marginBottom - marginTop;
+    const barWidth = Math.min(60, (chartW / keys.length) * 0.6);
+    const gap = chartW / keys.length;
+
+    ctx.clearRect(0, 0, width, height);
+
+    // Grid lines
+    const gridLines = 5;
+    ctx.strokeStyle = '#E8E4D4';
+    ctx.lineWidth = 1;
+    ctx.fillStyle = '#8A655A';
+    ctx.font = '500 10px "Menlo", monospace';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+
+    for (let i = 0; i <= gridLines; i++) {
+        const y = marginTop + chartH - (chartH * i / gridLines);
+        const val = (maxVal * i / gridLines);
+
+        ctx.beginPath();
+        ctx.setLineDash([3, 3]);
+        ctx.moveTo(marginLeft, y);
+        ctx.lineTo(width - 20, y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.fillText('₹' + abbreviate(val), marginLeft - 8, y);
+    }
+
+    // Bars
+    const barRects = [];
+    keys.forEach((key, i) => {
+        const val = values[i];
+        const barH = (val / maxVal) * chartH;
+        const x = marginLeft + gap * i + (gap - barWidth) / 2;
+        const y = marginTop + chartH - barH;
+
+        const grad = ctx.createLinearGradient(x, y + barH, x, y);
+        const colors = CHART_GRADIENTS[(i + 4) % CHART_GRADIENTS.length]; // Offset color
+        grad.addColorStop(0, colors[0]);
+        grad.addColorStop(1, colors[1]);
+
+        ctx.fillStyle = grad;
+        ctx.fillRect(x, y, barWidth, barH);
+
+        barRects.push({ x, y, w: barWidth, h: barH, key, val });
+
+        ctx.fillStyle = '#8A655A';
+        ctx.font = '500 10px "DM Sans", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillText(key, x + barWidth / 2, marginTop + chartH + 8);
+    });
+
+    // Tooltip
+    canvas.onmousemove = function (e) {
+        const rect = canvas.getBoundingClientRect();
+        const mx = (e.clientX - rect.left);
+        const my = (e.clientY - rect.top);
+        const hit = barRects.find(r => mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h);
+        if (hit) {
+            showTooltip(e.clientX, e.clientY,
+                `${hit.key}: ₹${hit.val.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
+            );
+            canvas.style.cursor = 'pointer';
+        } else {
+            hideTooltip();
+            canvas.style.cursor = 'default';
+        }
+    };
+    canvas.onmouseleave = () => { hideTooltip(); canvas.style.cursor = 'default'; };
+}
+
+// ============================================================
 // HELPERS
 // ============================================================
+function getBaseCategory(accountName) {
+    if (!accountName) return 'Uncategorized';
+    const parts = accountName.split(' - ');
+    if (parts.length > 1) {
+        let last = parts[parts.length - 1].trim();
+        if (last === '50') last = 'ATC';
+        if (['ECBC', '2024', 'MINING', 'LAYOUT', 'ATC'].includes(last)) {
+            return parts.slice(0, -1).join(' - ').trim();
+        }
+    }
+    return accountName.trim();
+}
+
+function getExpenseCompany(accountName) {
+    if (!accountName) return '';
+    const parts = accountName.split(' - ');
+    if (parts.length > 1) {
+        let last = parts[parts.length - 1].trim();
+        if (last === '50') last = 'ATC';
+        if (['ECBC', '2024', 'MINING', 'LAYOUT', 'ATC'].includes(last)) {
+            return last;
+        }
+    }
+    return '';
+}
+
 function formatISO(d) {
     return d.getFullYear() + '-' +
         String(d.getMonth() + 1).padStart(2, '0') + '-' +
@@ -819,6 +980,7 @@ window.addEventListener('resize', () => {
         if (dashFiltered.length > 0) {
             renderBarChart();
             renderDailyChart();
+            renderCompanyChart();
         }
     }, 200);
 });

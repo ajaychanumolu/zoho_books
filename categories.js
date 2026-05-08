@@ -299,3 +299,80 @@ const categoriesData = {
         "Misc. logistics (couriering event material, props, etc.)": []
     }
 };
+
+// ============================================================
+// EXPENSE CATEGORIES GROUPING (CORE BRIGHT)
+// ============================================================
+const coreBrightGroups = {
+    "C — Compliance": [
+        "Statutory Filings & Registrations",
+        "Financial Compliance",
+        "Legal & Contractual Compliance",
+        "Industry-Specific Compliance"
+    ],
+    "O — Operations": [
+        "Infrastructure & Utilities",
+        "Procurement & Consumables",
+        "Telecom",
+        "Transport & Logistics",
+        "Vendor & Partner Services"
+    ],
+    "R — Risk & Reserves": [
+        "Legal & Regulatory Safeguards",
+        "Operational Risk Cover",
+        "Business Insurance"
+    ],
+    "E — Equipment & Systems": [
+        "Hardware & Devices",
+        "Servers & Networking",
+        "IT Systems & Infra"
+    ],
+    "B — Brand & Culture": [
+        "Brand Development",
+        "Media & Communications",
+        "Community & Ecosystem"
+    ],
+    "R — R&D / Innovation": [
+        "Product Prototyping & MVPs",
+        "User Research & Testing",
+        "Experimental Features & A/B Testing",
+        "Analytics & Data Tools",
+        "Sandbox & Dev Environments"
+    ],
+    "I — Incentives & Hospitality": [
+        "Client Entertainment & Hospitality",
+        "Team Hospitality & Celebrations",
+        "Incentives & Spot Bonuses",
+        "Perks & Welcome Kits",
+        "Networking & Social Hosting",
+        "Premium Services for Experience",
+        "Special Morale Boosters"
+    ],
+    "G — Growth (Marketing & Sales)": [
+        "Paid Acquisition",
+        "Content & Creative Production",
+        "Tools",
+        "Sales Enablement",
+        "Campaigns & Sponsorships",
+        "Brand Visibility Investments",
+        "Sales Support & Collateral"
+    ],
+    "H — Human Resources": [
+        "Recruitment & Hiring",
+        "Salaries & Wages",
+        "Employee Benefits",
+        "Learning & Development",
+        "Performance & Growth Management",
+        "HR Operations & Compliance",
+        "Employee Exit Costs"
+    ],
+    "T — Tours & Events": [
+        "Business Travel",
+        "Accommodation & Logistics",
+        "Industry Events & Conferences",
+        "Client Events",
+        "Internal Company Events",
+        "Virtual Events (if applicable)",
+        "Miscellaneous & Contingency"
+    ]
+};
