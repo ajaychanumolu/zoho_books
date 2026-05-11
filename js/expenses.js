@@ -73,6 +73,7 @@ async function loadExpenses() {
 function applyFilters() {
     const fromDate = document.getElementById('filterFrom').value;
     const toDate = document.getElementById('filterTo').value;
+    const company = document.getElementById('filterCompany') ? document.getElementById('filterCompany').value : '';
     const searchQuery = document.getElementById('searchInput').value.toLowerCase().trim();
 
     let result = [...allExpenses];
@@ -83,6 +84,19 @@ function applyFilters() {
     }
     if (toDate) {
         result = result.filter(exp => exp.date <= toDate);
+    }
+
+    // Company filter
+    if (company) {
+        result = result.filter(e => {
+            const expCompany = getExpenseCompany(e.account_name);
+            if (expCompany === company) return true;
+            
+            const matchesDirect = e.company === company || e.customer_name === company || e.reference_number === company;
+            const matchesCustom = Array.isArray(e.custom_fields) && e.custom_fields.some(cf => cf.value === company);
+            const matchesNote = e.notes && e.notes.includes(company);
+            return matchesDirect || matchesCustom || matchesNote;
+        });
     }
 
     // Text search filter
@@ -136,6 +150,7 @@ function applyFilters() {
 function clearFilters() {
     document.getElementById('filterFrom').value = '';
     document.getElementById('filterTo').value = '';
+    if (document.getElementById('filterCompany')) document.getElementById('filterCompany').value = '';
     document.getElementById('searchInput').value = '';
     applyFilters();
 }
@@ -295,6 +310,19 @@ window.addEventListener('storage', function (e) {
         setTimeout(() => loadExpenses(), 2000);
     }
 });
+
+function getExpenseCompany(accountName) {
+    if (!accountName) return '';
+    const parts = accountName.split(' - ');
+    if (parts.length > 1) {
+        let last = parts[parts.length - 1].trim();
+        if (last === '50') last = 'ATC';
+        if (['ECBC', '2024', 'MINING', 'LAYOUT', 'ATC'].includes(last)) {
+            return last;
+        }
+    }
+    return '';
+}
 
 // ---- Initial load ----
 loadExpenses();

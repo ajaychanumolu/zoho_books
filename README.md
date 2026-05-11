@@ -25,7 +25,7 @@ A clean, minimal expense tracking interface for Zoho Books with AI chat assistan
 
 ## Configuration
 
-All webhook URLs are in **`config.js`**:
+All webhook URLs are in **`js/config.js`**:
 
 ```js
 const CONFIG = {
