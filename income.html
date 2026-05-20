@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zoho Books — Expense Ledger</title>
-    <meta name="description" content="Expense tracking interface for Zoho Books with AI assistant.">
+    <title>Zoho Books — Income Ledger</title>
+    <meta name="description" content="Income tracking interface synced to Supabase database.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -15,7 +15,7 @@
 <!-- NAV -->
 <nav class="nav">
     <div class="nav-inner">
-        <a href="#" class="nav-logo">
+        <a href="index.html" class="nav-logo">
             <div class="nav-logo-icon">ZB</div>
             Zoho Books
         </a>
@@ -24,7 +24,11 @@
                 <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
                 Dashboard
             </a>
-            <a href="income.html" class="btn btn-outline btn-sm" title="Add Income">
+            <a href="index.html" class="btn btn-outline btn-sm" title="Add Expense">
+                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+                Add Expense
+            </a>
+            <a href="income.html" class="btn btn-primary btn-sm" title="Add Income">
                 <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 Add Income
             </a>
@@ -43,15 +47,15 @@
 <!-- MAIN -->
 <main class="main-content">
     <div class="page-header">
-        <h1 class="page-title">Record Expenses</h1>
-        <p class="page-desc">Log expenses and sync them to your Zoho Books ledger.</p>
+        <h1 class="page-title">Record Income</h1>
+        <p class="page-desc">Log cash inflows and sync them to Supabase database.</p>
     </div>
 
     <div class="form-wrapper">
-        <form id="bulkExpenseForm">
-            <div id="expenseContainer"></div>
+        <form id="bulkIncomeForm">
+            <div id="incomeContainer"></div>
             <div class="form-total-bar">
-                <span class="form-total-label">Total</span>
+                <span class="form-total-label">Total Income</span>
                 <span class="form-total-value" id="runningTotal">₹0.00</span>
             </div>
             <div class="form-actions">
@@ -61,7 +65,7 @@
                 </button>
                 <button type="submit" class="btn btn-primary" id="submitBtn">
                     <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
-                    Sync to Zoho Books
+                    Sync to Supabase
                 </button>
             </div>
             <div id="statusMessage" class="message"></div>
@@ -70,7 +74,7 @@
 </main>
 
 <footer class="footer">
-    &copy; 2026 Expense Ledger &mdash; Synced with Zoho Books via n8n
+    &copy; 2026 Expense Ledger &mdash; Synced with Supabase & Zoho Books via n8n
 </footer>
 
 <!-- CHAT TOGGLE -->
@@ -102,11 +106,10 @@
     </div>
 </div>
 
-<!-- JS: config first, then categories, app, chat -->
-<script src="js/config.js?v=2"></script>
-<script src="js/categories.js?v=2"></script>
-<script src="js/app.js?v=2"></script>
-<script src="js/chat.js?v=2"></script>
+<!-- JS: config first, then income, chat -->
+<script src="js/config.js?v=4"></script>
+<script src="js/income.js?v=4"></script>
+<script src="js/chat.js?v=4"></script>
 
 </body>
 </html>

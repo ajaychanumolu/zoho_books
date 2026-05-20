@@ -366,13 +366,70 @@ optgroup { font-weight: bold; color: var(--foreground); font-style: normal; back
 .spin { animation: spin 1s linear infinite; }
 
 /* ===== RESPONSIVE ===== */
-@media (max-width: 640px) {
+@media (max-width: 768px) {
     .main-content { padding: 1.25rem 1rem 3rem; }
     .nav { padding: 0 1rem; }
+    .nav-inner { gap: 10px; }
+    .nav-logo { font-size: 1.1rem; }
+    
+    /* Responsive Navigation Buttons - Hide text and turn into circular icon buttons */
+    .nav-right { gap: 6px; }
+    .nav-right .btn-sm {
+        font-size: 0 !important;
+        padding: 0 !important;
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--border);
+    }
+    .nav-right .btn-sm svg {
+        margin: 0 !important;
+        width: 16px !important;
+        height: 16px !important;
+    }
+    
     .form-wrapper { padding: 1rem; }
     .chat-panel { width: calc(100% - 32px); right: 16px; bottom: 88px; }
     .summary-row { grid-template-columns: 1fr; }
     .table-wrapper { overflow-x: auto; }
     .expense-table { min-width: 700px; }
     .table-search { width: 100%; }
+    
+    /* Stack action buttons vertically on mobile */
+    .form-actions {
+        flex-direction: column;
+        gap: 12px;
+        align-items: stretch;
+    }
+    .form-actions button, .form-actions a {
+        width: 100%;
+        text-align: center;
+    }
+
+    /* Responsive filter bar in View Expenses page */
+    .filter-bar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+    }
+    .filter-group {
+        justify-content: space-between;
+        width: 100%;
+    }
+    .filter-date {
+        width: 65%;
+        box-sizing: border-box;
+    }
+    .filter-bar button {
+        width: 100%;
+        margin-top: 4px;
+    }
+    .filter-info {
+        margin-left: 0;
+        text-align: center;
+        width: 100%;
+    }
 }

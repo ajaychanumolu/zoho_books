@@ -239,4 +239,19 @@
     .chart-body-pie { flex-direction: column; }
     .chart-body-pie canvas { width: 220px !important; height: 220px !important; }
     .kpi-value { font-size: 1rem; }
+    
+    /* Responsive custom filters */
+    .dash-filter-custom {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+    .dash-filter-custom input, .dash-filter-custom select {
+        width: 100%;
+        box-sizing: border-box;
+    }
+    .filter-to-label {
+        text-align: center;
+        margin: 2px 0;
+    }
 }

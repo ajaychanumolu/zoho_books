@@ -6,6 +6,10 @@ let dashAllExpenses = [];
 let dashFiltered = [];
 let dashFilteredDatesOnly = [];
 
+let dashAllIncomes = [];
+let dashFilteredIncomes = [];
+let dashFilteredIncomesDatesOnly = [];
+
 // ---- Color palette for charts ----
 const CHART_COLORS = [
     '#A37764', '#6A9A6E', '#2B5A76', '#C4956E', '#6B3F6B',
@@ -57,13 +61,14 @@ async function loadDashboard() {
     refreshBtn.disabled = true;
 
     try {
+        // 1. Fetch Expenses from Zoho Books
         const res = await fetch(CONFIG.GET_EXPENSES_URL, {
             method: "POST",
             headers: { "Content-Type": "application/json", "Accept": "application/json" },
             body: JSON.stringify({ action: "getExpenses" })
         });
 
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) throw new Error(`Expenses: HTTP ${res.status}`);
         const data = await res.json();
 
         let expenses = [];
@@ -72,8 +77,54 @@ async function loadDashboard() {
         } else if (data.expenses) {
             expenses = data.expenses;
         }
-
         dashAllExpenses = expenses;
+
+        // 2. Fetch Incomes from Supabase (via n8n)
+        let incomes = [];
+        try {
+            // First try GET with a timestamp query param to force bypass cache
+            const resInc = await fetch(`${CONFIG.GET_INCOMES_URL}?t=${Date.now()}`, {
+                headers: { "Cache-Control": "no-cache", "Pragma": "no-cache" }
+            });
+            if (resInc.ok) {
+                const incData = await resInc.json();
+                if (Array.isArray(incData)) {
+                    incomes = incData;
+                } else if (incData && typeof incData === 'object') {
+                    if (incData.incomes && Array.isArray(incData.incomes)) {
+                        incomes = incData.incomes;
+                    } else if (incData.data && Array.isArray(incData.data)) {
+                        incomes = incData.data;
+                    } else if (incData.id !== undefined || incData.amount !== undefined) {
+                        incomes = [incData];
+                    }
+                }
+            } else {
+                // Try fallback POST
+                const resIncPost = await fetch(CONFIG.GET_INCOMES_URL, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ action: "getIncomes" })
+                });
+                if (resIncPost.ok) {
+                    const incData = await resIncPost.json();
+                    if (Array.isArray(incData)) {
+                        incomes = incData;
+                    } else if (incData && typeof incData === 'object') {
+                        if (incData.incomes && Array.isArray(incData.incomes)) {
+                            incomes = incData.incomes;
+                        } else if (incData.id !== undefined || incData.amount !== undefined) {
+                            incomes = [incData];
+                        }
+                    }
+                }
+            }
+        } catch (incErr) {
+            console.warn('[Dashboard] Income loading failed, defaulting to empty:', incErr);
+            incomes = [];
+        }
+        dashAllIncomes = incomes;
+
         loading.classList.add('hidden');
         content.classList.remove('hidden');
 
@@ -137,27 +188,42 @@ function applyDashFilters() {
     const to = document.getElementById('dashTo').value;
     const company = document.getElementById('dashCompany') ? document.getElementById('dashCompany').value : '';
 
+    // Filter expenses
     let result = [...dashAllExpenses];
     if (from) result = result.filter(e => e.date >= from);
     if (to) result = result.filter(e => e.date <= to);
 
-    // Save date-filtered array for the company chart
     dashFilteredDatesOnly = [...result];
     if (company) {
         result = result.filter(e => {
-            // Check if the account name has the company suffix
             const expCompany = getExpenseCompany(e.account_name);
             if (expCompany === company) return true;
-            
-            // Fallbacks in case n8n put it elsewhere
             const matchesDirect = e.company === company || e.customer_name === company || e.reference_number === company;
             const matchesCustom = Array.isArray(e.custom_fields) && e.custom_fields.some(cf => cf.value === company);
             const matchesNote = e.notes && e.notes.includes(company);
             return matchesDirect || matchesCustom || matchesNote;
         });
     }
-
     dashFiltered = result;
+
+    // Filter incomes
+    let incResult = [...dashAllIncomes];
+    if (from || to) {
+        incResult = incResult.filter(i => {
+            if (!i.date) return false;
+            const itemDate = i.date.substring(0, 10);
+            if (from && itemDate < from) return false;
+            if (to && itemDate > to) return false;
+            return true;
+        });
+    }
+
+    dashFilteredIncomesDatesOnly = [...incResult];
+    if (company) {
+        const cleanCompany = company.trim().toLowerCase();
+        incResult = incResult.filter(i => i.company && i.company.trim().toLowerCase() === cleanCompany);
+    }
+    dashFilteredIncomes = incResult;
 
     // Deactivate presets if custom dates don't match any preset
     if (from || to) {
@@ -176,7 +242,9 @@ function applyDashFilters() {
 function renderDashboard() {
     renderKPIs();
     renderPieChart();
+    renderIncomeCompanyPieChart();
     renderBarChart();
+    renderCashFlowChart();
     renderTop5();
     renderDailyChart();
     renderPaymentChart();
@@ -189,17 +257,42 @@ function renderDashboard() {
 // ============================================================
 function renderKPIs() {
     const expenses = dashFiltered;
-    const total = expenses.reduce((s, e) => s + (parseFloat(e.total) || 0), 0);
-    const count = expenses.length;
-    const avg = count > 0 ? total / count : 0;
-    const highest = expenses.reduce((max, e) => Math.max(max, parseFloat(e.total) || 0), 0);
-    const categories = new Set(expenses.map(e => getBaseCategory(e.account_name)).filter(Boolean));
+    const incomes = dashFilteredIncomes;
 
-    animateValue('kpiTotalSpent', total, true);
+    const totalSpent = expenses.reduce((s, e) => s + (parseFloat(e.total) || 0), 0);
+    const totalIncome = incomes.reduce((s, i) => s + (parseFloat(i.amount) || 0), 0);
+    const netBalance = totalIncome - totalSpent;
+    const count = expenses.length + incomes.length;
+
+    const activeComps = new Set();
+    expenses.forEach(e => {
+        const c = getExpenseCompany(e.account_name);
+        if (c) activeComps.add(c);
+    });
+    incomes.forEach(i => {
+        if (i.company) activeComps.add(i.company);
+    });
+
+    animateValue('kpiTotalIncome', totalIncome, true);
+    animateValue('kpiTotalSpent', totalSpent, true);
+    animateValue('kpiNetBalance', netBalance, true);
+
+    const netCard = document.getElementById('kpiNetCard');
+    const netIcon = document.getElementById('kpiNetIcon');
+    if (netCard && netIcon) {
+        if (netBalance >= 0) {
+            netCard.style.borderColor = 'var(--success)';
+            netIcon.style.background = 'linear-gradient(135deg, #e0f0e1, #a3cfa6)';
+            netIcon.style.color = 'var(--success)';
+        } else {
+            netCard.style.borderColor = 'var(--danger)';
+            netIcon.style.background = 'linear-gradient(135deg, #F8E0DC, #E0A09A)';
+            netIcon.style.color = 'var(--danger)';
+        }
+    }
+
     document.getElementById('kpiCount').textContent = count.toLocaleString('en-IN');
-    animateValue('kpiAvg', avg, true);
-    animateValue('kpiHighest', highest, true);
-    document.getElementById('kpiCategories').textContent = categories.size;
+    document.getElementById('kpiCompaniesActive').textContent = activeComps.size.toLocaleString('en-IN');
 }
 
 function animateValue(id, target, isCurrency) {
@@ -809,15 +902,30 @@ function renderCompanyChart() {
     const ctx = canvas.getContext('2d');
     ctx.scale(dpr, dpr);
 
-    // Aggregate by company using dashFilteredDatesOnly
+    // Aggregate both Expenses and Incomes by company
     const compMap = {};
+    const knownCompanies = ['ECBC', '2024', 'MINING', 'LAYOUT', 'ATC'];
+    
+    // Initialize map
+    knownCompanies.forEach(c => compMap[c] = { income: 0, expense: 0 });
+    compMap['Unknown'] = { income: 0, expense: 0 };
+
     dashFilteredDatesOnly.forEach(e => {
         const comp = getExpenseCompany(e.account_name) || 'Unknown';
-        compMap[comp] = (compMap[comp] || 0) + (parseFloat(e.total) || 0);
+        if (!compMap[comp]) compMap[comp] = { income: 0, expense: 0 };
+        compMap[comp].expense += (parseFloat(e.total) || 0);
     });
 
-    const keys = Object.keys(compMap).sort((a,b) => compMap[b] - compMap[a]);
-    const values = keys.map(k => compMap[k]);
+    dashFilteredIncomesDatesOnly.forEach(i => {
+        const comp = i.company || 'Unknown';
+        if (!compMap[comp]) compMap[comp] = { income: 0, expense: 0 };
+        compMap[comp].income += (parseFloat(i.amount) || 0);
+    });
+
+    // Keys to show: only those with either values > 0 or in known list
+    const keys = Object.keys(compMap).filter(k => 
+        compMap[k].income > 0 || compMap[k].expense > 0 || (k !== 'Unknown' && knownCompanies.includes(k))
+    ).sort();
 
     if (keys.length === 0) {
         ctx.clearRect(0, 0, width, height);
@@ -828,14 +936,15 @@ function renderCompanyChart() {
         return;
     }
 
-    const maxVal = Math.max(...values) * 1.15;
+    const maxVal = Math.max(...keys.map(k => Math.max(compMap[k].income, compMap[k].expense))) * 1.15 || 1;
     const marginLeft = 65;
     const marginBottom = 36;
     const marginTop = 10;
     const chartW = width - marginLeft - 20;
     const chartH = height - marginBottom - marginTop;
-    const barWidth = Math.min(60, (chartW / keys.length) * 0.6);
-    const gap = chartW / keys.length;
+    
+    const groupGap = chartW / keys.length;
+    const barWidth = Math.min(24, (groupGap * 0.35));
 
     ctx.clearRect(0, 0, width, height);
 
@@ -862,29 +971,40 @@ function renderCompanyChart() {
         ctx.fillText('₹' + abbreviate(val), marginLeft - 8, y);
     }
 
-    // Bars
     const barRects = [];
     keys.forEach((key, i) => {
-        const val = values[i];
-        const barH = (val / maxVal) * chartH;
-        const x = marginLeft + gap * i + (gap - barWidth) / 2;
-        const y = marginTop + chartH - barH;
+        const data = compMap[key];
+        const incH = (data.income / maxVal) * chartH;
+        const expH = (data.expense / maxVal) * chartH;
 
-        const grad = ctx.createLinearGradient(x, y + barH, x, y);
-        const colors = CHART_GRADIENTS[(i + 4) % CHART_GRADIENTS.length]; // Offset color
-        grad.addColorStop(0, colors[0]);
-        grad.addColorStop(1, colors[1]);
+        const groupX = marginLeft + groupGap * i;
+        const incX = groupX + (groupGap - (barWidth * 2 + 4)) / 2;
+        const expX = incX + barWidth + 4;
 
-        ctx.fillStyle = grad;
-        ctx.fillRect(x, y, barWidth, barH);
+        const incY = marginTop + chartH - incH;
+        const expY = marginTop + chartH - expH;
 
-        barRects.push({ x, y, w: barWidth, h: barH, key, val });
+        // Draw Income (Green Gradient)
+        const incGrad = ctx.createLinearGradient(incX, incY + incH, incX, incY);
+        incGrad.addColorStop(0, '#6A9A6E');
+        incGrad.addColorStop(1, '#8FBF8A');
+        ctx.fillStyle = incGrad;
+        ctx.fillRect(incX, incY, barWidth, incH);
+        barRects.push({ x: incX, y: incY, w: barWidth, h: incH, type: 'Income', company: key, val: data.income });
+
+        // Draw Expense (Red/Brown Gradient)
+        const expGrad = ctx.createLinearGradient(expX, expY + expH, expX, expY);
+        expGrad.addColorStop(0, '#A37764');
+        expGrad.addColorStop(1, '#C4956E');
+        ctx.fillStyle = expGrad;
+        ctx.fillRect(expX, expY, barWidth, expH);
+        barRects.push({ x: expX, y: expY, w: barWidth, h: expH, type: 'Expense', company: key, val: data.expense });
 
         ctx.fillStyle = '#8A655A';
         ctx.font = '500 10px "DM Sans", sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
-        ctx.fillText(key, x + barWidth / 2, marginTop + chartH + 8);
+        ctx.fillText(key, groupX + groupGap / 2, marginTop + chartH + 8);
     });
 
     // Tooltip
@@ -895,7 +1015,248 @@ function renderCompanyChart() {
         const hit = barRects.find(r => mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h);
         if (hit) {
             showTooltip(e.clientX, e.clientY,
-                `${hit.key}: ₹${hit.val.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
+                `${hit.company} ${hit.type}: ₹${hit.val.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
+            );
+            canvas.style.cursor = 'pointer';
+        } else {
+            hideTooltip();
+            canvas.style.cursor = 'default';
+        }
+    };
+    canvas.onmouseleave = () => { hideTooltip(); canvas.style.cursor = 'default'; };
+}
+
+// ============================================================
+// NEW CHARTS — INCOME STREAM & MONTHLY CASH FLOW
+// ============================================================
+function renderIncomeCompanyPieChart() {
+    const canvas = document.getElementById('chartIncomeCompany');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const size = 240;
+    canvas.width = size * dpr;
+    canvas.height = size * dpr;
+    canvas.style.width = size + 'px';
+    canvas.style.height = size + 'px';
+    ctx.scale(dpr, dpr);
+
+    const companyMap = {};
+    dashFilteredIncomes.forEach(i => {
+        const company = i.company || 'Other';
+        companyMap[company] = (companyMap[company] || 0) + (parseFloat(i.amount) || 0);
+    });
+
+    const sorted = Object.entries(companyMap).sort((a, b) => b[1] - a[1]);
+    const total = sorted.reduce((s, [, v]) => s + v, 0);
+
+    if (sorted.length === 0 || total === 0) {
+        ctx.clearRect(0, 0, size, size);
+        ctx.fillStyle = '#BAAB92';
+        ctx.font = '500 14px "DM Sans", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('No data available', size / 2, size / 2);
+        document.getElementById('incomeCompanyLegend').innerHTML = '';
+        return;
+    }
+
+    const cx = size / 2, cy = size / 2, radius = 95;
+    let startAngle = -Math.PI / 2;
+    const slices = [];
+
+    ctx.clearRect(0, 0, size, size);
+    
+    // Greenish/teal/gold/blue color palette for income to contrast with expenses
+    const incColors = ['#6A9A6E', '#2B5A76', '#7A5C2E', '#6B3F6B', '#C4956E', '#8FBF8A', '#5A9ABF', '#BFA162'];
+
+    sorted.forEach(([company, val], i) => {
+        const sliceAngle = (val / total) * 2 * Math.PI;
+        const color = incColors[i % incColors.length];
+
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, radius, startAngle, startAngle + sliceAngle);
+        ctx.closePath();
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.strokeStyle = '#FDFCF7';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        slices.push({ company, val, color, startAngle, endAngle: startAngle + sliceAngle });
+        startAngle += sliceAngle;
+    });
+
+    // Donut hole
+    ctx.beginPath();
+    ctx.arc(cx, cy, 50, 0, 2 * Math.PI);
+    ctx.fillStyle = '#FDFCF7';
+    ctx.fill();
+
+    ctx.fillStyle = '#56453F';
+    ctx.font = '700 11px "Menlo", monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('₹' + abbreviate(total), cx, cy - 6);
+    ctx.font = '500 8px "DM Sans", sans-serif';
+    ctx.fillStyle = '#8A655A';
+    ctx.fillText('TOTAL INCOME', cx, cy + 8);
+
+    // Legend
+    const legendEl = document.getElementById('incomeCompanyLegend');
+    legendEl.innerHTML = sorted.slice(0, 5).map(([company, val], i) => `
+        <div class="pie-legend-item">
+            <div class="pie-legend-dot" style="background:${incColors[i % incColors.length]}"></div>
+            <span class="pie-legend-label">${escapeHtml(company)}</span>
+            <span class="pie-legend-value">${((val / total) * 100).toFixed(1)}%</span>
+        </div>
+    `).join('');
+
+    // Tooltip
+    canvas.onmousemove = function (e) {
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        const dx = mx - cx, dy = my - cy;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > 50 && dist < radius) {
+            let angle = Math.atan2(dy, dx);
+            if (angle < -Math.PI / 2) angle += 2 * Math.PI;
+            const slice = slices.find(s => angle >= s.startAngle && angle < s.endAngle);
+            if (slice) {
+                showTooltip(e.clientX, e.clientY,
+                    `${slice.company}: ₹${slice.val.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
+                );
+                return;
+            }
+        }
+        hideTooltip();
+    };
+    canvas.onmouseleave = hideTooltip;
+}
+
+function renderCashFlowChart() {
+    const canvas = document.getElementById('chartCashFlow');
+    if (!canvas) return;
+    const container = canvas.parentElement;
+    const width = container.clientWidth - 40;
+    const height = 220;
+    const dpr = window.devicePixelRatio || 1;
+
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    canvas.style.width = width + 'px';
+    canvas.style.height = height + 'px';
+
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    // Aggregate expenses and incomes by month
+    const cashMap = {};
+    dashFiltered.forEach(e => {
+        if (!e.date) return;
+        const key = e.date.substring(0, 7);
+        if (!cashMap[key]) cashMap[key] = { income: 0, expense: 0 };
+        cashMap[key].expense += (parseFloat(e.total) || 0);
+    });
+    dashFilteredIncomes.forEach(i => {
+        if (!i.date) return;
+        const key = i.date.substring(0, 7);
+        if (!cashMap[key]) cashMap[key] = { income: 0, expense: 0 };
+        cashMap[key].income += (parseFloat(i.amount) || 0);
+    });
+
+    const keys = Object.keys(cashMap).sort();
+    
+    if (keys.length === 0) {
+        ctx.clearRect(0, 0, width, height);
+        ctx.fillStyle = '#BAAB92';
+        ctx.font = '500 14px "DM Sans", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('No data available', width / 2, height / 2);
+        return;
+    }
+
+    const maxVal = Math.max(...keys.map(k => Math.max(cashMap[k].income, cashMap[k].expense))) * 1.15 || 1;
+    const marginLeft = 65;
+    const marginBottom = 36;
+    const marginTop = 10;
+    const chartW = width - marginLeft - 20;
+    const chartH = height - marginBottom - marginTop;
+    
+    const groupGap = chartW / keys.length;
+    const barWidth = Math.min(22, (groupGap * 0.4));
+    
+    ctx.clearRect(0, 0, width, height);
+
+    // Grid lines
+    const gridLines = 5;
+    ctx.strokeStyle = '#E8E4D4';
+    ctx.lineWidth = 1;
+    ctx.fillStyle = '#8A655A';
+    ctx.font = '500 10px "Menlo", monospace';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+
+    for (let i = 0; i <= gridLines; i++) {
+        const y = marginTop + chartH - (chartH * i / gridLines);
+        const val = (maxVal * i / gridLines);
+
+        ctx.beginPath();
+        ctx.setLineDash([3, 3]);
+        ctx.moveTo(marginLeft, y);
+        ctx.lineTo(width - 20, y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.fillText('₹' + abbreviate(val), marginLeft - 8, y);
+    }
+
+    const barRects = [];
+    keys.forEach((key, i) => {
+        const data = cashMap[key];
+        const incH = (data.income / maxVal) * chartH;
+        const expH = (data.expense / maxVal) * chartH;
+
+        const groupX = marginLeft + groupGap * i;
+        const incX = groupX + (groupGap - (barWidth * 2 + 4)) / 2;
+        const expX = incX + barWidth + 4;
+        
+        const incY = marginTop + chartH - incH;
+        const expY = marginTop + chartH - expH;
+
+        // Draw Inflow (Income)
+        const incGrad = ctx.createLinearGradient(incX, incY + incH, incX, incY);
+        incGrad.addColorStop(0, '#6A9A6E');
+        incGrad.addColorStop(1, '#8FBF8A');
+        ctx.fillStyle = incGrad;
+        ctx.fillRect(incX, incY, barWidth, incH);
+        barRects.push({ x: incX, y: incY, w: barWidth, h: incH, type: 'Income', month: key, val: data.income });
+
+        // Draw Outflow (Expense)
+        const expGrad = ctx.createLinearGradient(expX, expY + expH, expX, expY);
+        expGrad.addColorStop(0, '#A37764');
+        expGrad.addColorStop(1, '#C4956E');
+        ctx.fillStyle = expGrad;
+        ctx.fillRect(expX, expY, barWidth, expH);
+        barRects.push({ x: expX, y: expY, w: barWidth, h: expH, type: 'Expense', month: key, val: data.expense });
+
+        const label = formatMonthLabel(key);
+        ctx.fillStyle = '#8A655A';
+        ctx.font = '500 10px "DM Sans", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillText(label, groupX + groupGap / 2, marginTop + chartH + 8);
+    });
+
+    canvas.onmousemove = function (e) {
+        const rect = canvas.getBoundingClientRect();
+        const mx = (e.clientX - rect.left);
+        const my = (e.clientY - rect.top);
+        const hit = barRects.find(r => mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h);
+        if (hit) {
+            showTooltip(e.clientX, e.clientY,
+                `${formatMonthLabel(hit.month)} ${hit.type}: ₹${hit.val.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
             );
             canvas.style.cursor = 'pointer';
         } else {
@@ -977,18 +1338,19 @@ let resizeTimeout;
 window.addEventListener('resize', () => {
     clearTimeout(resizeTimeout);
     resizeTimeout = setTimeout(() => {
-        if (dashFiltered.length > 0) {
+        if (dashFiltered.length > 0 || dashFilteredIncomes.length > 0) {
             renderBarChart();
+            renderCashFlowChart();
             renderDailyChart();
             renderCompanyChart();
         }
     }, 200);
 });
 
-// ---- Auto-refresh when new expense is added ----
+// ---- Auto-refresh when new transaction is added ----
 window.addEventListener('storage', function (e) {
-    if (e.key === 'expense_added') {
-        setTimeout(() => loadDashboard(), 2000);
+    if (e.key === 'expense_added' || e.key === 'income_added') {
+        setTimeout(() => loadDashboard(), 1000);
     }
 });
 

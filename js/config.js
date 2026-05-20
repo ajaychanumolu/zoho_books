@@ -12,4 +12,10 @@ const CONFIG = {
 
     // n8n Webhook: AI Chat assistant
     CHAT_WEBHOOK_URL: "https://n8n.ajaychanumolu.me/webhook/d927bd76-dbf6-4793-97e1-6ce1c3251034/chat",
+
+    // n8n Webhook: Add/create income in Supabase
+    INCOME_WEBHOOK_URL: "https://n8n.ajaychanumolu.me/webhook/add-income",
+
+    // n8n Webhook: Get all income from Supabase
+    GET_INCOMES_URL: "https://n8n.ajaychanumolu.me/webhook/get-income",
 };

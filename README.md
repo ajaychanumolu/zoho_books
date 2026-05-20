@@ -12,14 +12,21 @@ A clean, minimal expense tracking interface for Zoho Books with AI chat assistan
 ## Project Structure
 
 ```
-├── Index.html          # Add expenses page
+├── index.html          # Add expenses page (main entry)
+├── dashboard.html      # Analytics dashboard
 ├── expenses.html       # View all expenses page
-├── config.js           # ⚙️ All API endpoints (edit this to change URLs)
-├── styles.css          # Design system (The Classic Ledger)
-├── categories.js       # Expense category data
-├── app.js              # Expense form logic
-├── chat.js             # Chat widget logic
-├── expenses.js         # Expenses table logic
+├── README.md           # Documentation
+├── test-webhook.js     # Webhook verification helper
+├── css/
+│   ├── styles.css      # Main design system (The Classic Ledger)
+│   └── dashboard.css   # Dashboard styling
+├── js/
+│   ├── app.js          # Expense form & category grouping logic
+│   ├── categories.js   # Expense categories metadata
+│   ├── chat.js         # Assistant panel integration
+│   ├── config.js       # ⚙️ Webhook configurations
+│   ├── dashboard.js    # Dashboard analytics & charts logic
+│   └── expenses.js     # Expenses table sorting/filtering logic
 └── .gitignore
 ```
 
